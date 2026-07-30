@@ -1,0 +1,6 @@
+Flask
+gunicorn
+APScheduler
+requests
+RPi.GPIO
+python-dotenv
