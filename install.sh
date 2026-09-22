@@ -20,7 +20,7 @@ python3 -m venv "$VENV"
 
 if [ ! -f "$APP_DIR/.env" ]; then
     cp "$APP_DIR/.env.example" "$APP_DIR/.env"
-    echo "Created .env from .env.example — edit it with your ntfy and RTSP details."
+    echo "Created .env from .env.example - edit it with your ntfy and RTSP details."
 fi
 
 # ffmpeg pulls the still frame from the RTSP camera, if configured
@@ -52,12 +52,21 @@ if [ "$SKIP_FW" = false ]; then
     if [ -n "$PROXY_IP" ]; then
         sudo ufw allow from "$PROXY_IP" to any port 4000 proto tcp comment 'gateremote reverse proxy'
     else
-        echo "No proxy IP given — skipping port 4000 rule. Add later with:"
+        echo "No proxy IP given - skipping port 4000 rule. Add later with:"
         echo "  sudo ufw allow from <ip> to any port 4000 proto tcp"
+        echo
+        echo "WARNING: port 4000 is now reachable from anywhere on the LAN."
+        echo "Anyone who can reach it can toggle the gate without passing through"
+        echo "the auth proxy. Add the rule above before leaving this running."
     fi
     sudo ufw --force enable
 else
     echo "Skipping firewall setup (--skip-firewall)"
+    echo
+    echo "WARNING: no ufw rules were applied, so port 4000 is reachable from"
+    echo "anywhere on the LAN and bypasses the auth proxy entirely. Restrict it"
+    echo "yourself with:"
+    echo "  sudo ufw allow from <proxy-ip> to any port 4000 proto tcp"
 fi
 
 

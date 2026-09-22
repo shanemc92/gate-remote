@@ -13,11 +13,19 @@ import RPi.GPIO as GPIO
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
 from flask import Flask, Response, render_template, request, redirect
+from flask_wtf import CSRFProtect
 
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("gateremote")
+
+def _require_env(name):
+    v = os.environ.get(name)
+    if not v:
+        raise RuntimeError(f"{name} is not set - see .env.example")
+    return v
+
 
 # --- Config (set in .env, see .env.example) ---
 WEBHOOK_URL = os.environ.get("GATE_WEBHOOK_URL", "")
@@ -32,6 +40,14 @@ RTSP_URL = os.environ.get("RTSP_URL", "")
 SNAPSHOT_INTERVAL = int(os.environ.get("SNAPSHOT_INTERVAL", 10))
 
 app = Flask(__name__)
+# Signs the session cookie that carries the CSRF token. No default: a predictable
+# key would let anyone mint a valid token, so refuse to start without one.
+app.config["SECRET_KEY"] = _require_env("SECRET_KEY")
+
+# The app sits behind an auth proxy, which authenticates the session but does not
+# stop a cross-site request riding it. CSRFProtect covers every POST.
+csrf = CSRFProtect()
+csrf.init_app(app)
 
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(GATE_PIN, GPIO.OUT, initial=GPIO.HIGH)  # relay off
@@ -108,13 +124,13 @@ def snapshot():
     return Response(data, mimetype="image/jpeg")
 
 
-@app.route("/toggle")
+@app.route("/toggle", methods=["POST"])
 def toggle():
     toggle_gate()
     return redirect("/")
 
 
-@app.route("/toggle-scheduler")
+@app.route("/toggle-scheduler", methods=["POST"])
 def toggle_scheduler():
     state["scheduler_enabled"] = not state["scheduler_enabled"]
     return redirect("/")
@@ -122,7 +138,12 @@ def toggle_scheduler():
 
 @app.route("/update_job/<job_id>", methods=["POST"])
 def update_job(job_id):
-    new_time = datetime.strptime(request.form["new_time"], "%H:%M").time()
+    if job_id not in job_list:
+        return "Unknown job id", 400
+    try:
+        new_time = datetime.strptime(request.form.get("new_time", ""), "%H:%M").time()
+    except ValueError:
+        return "Bad time format, expected HH:MM", 400
     job_list[job_id] = f"{new_time.hour:02}:{new_time.minute:02}"
     scheduler.reschedule_job(job_id, trigger="cron", hour=new_time.hour, minute=new_time.minute)
     return redirect("/")
@@ -139,4 +160,6 @@ for job_id, default_time in job_list.items():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=4000, debug=False)
+    # Loopback by default. Set BIND_HOST to expose the dev server; the gunicorn
+    # bind in install.sh stays on 0.0.0.0, with ufw limiting it to the proxy IP.
+    app.run(host=os.environ.get("BIND_HOST", "127.0.0.1"), port=4000, debug=False)

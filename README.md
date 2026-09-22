@@ -30,6 +30,7 @@ The relay bridges the remote's two button PCB pads — closing that contact simu
 ```bash
 git clone <this-repo>
 cd gateremote
+chmod +x install.sh
 ./install.sh
 ```
 
@@ -53,6 +54,8 @@ Set in `.env` (see `.env.example`):
 
 | Variable | Description |
 |---|---|
+| `SECRET_KEY` | Signs the session cookie carrying the CSRF token. **Required** — the app refuses to start without it. Generate with `python3 -c "import secrets; print(secrets.token_hex(32))"` |
+| `BIND_HOST` | Address the dev server (`python3 remote.py`) binds to. Defaults to `127.0.0.1`; the systemd unit uses gunicorn and is unaffected |
 | `GATE_WEBHOOK_URL` | ntfy topic URL to POST to on toggle (optional — leave blank to disable) |
 | `GATE_WEBHOOK_TAG` | Value for the `ta` header sent with the notification |
 | `GATE_PIN` | BCM pin number wired to the relay (default `17`) |
@@ -68,6 +71,25 @@ Camera snapshots are captured with `ffmpeg` (installed automatically by `install
 - **Toggle Gate** — fires the relay once
 - **Scheduler: On/Off** — enables/disables the two scheduled times below it; off by default and resets to off on every restart
 - Edit either time field to reschedule that slot immediately
+
+## Security model
+
+This app toggles a physical gate, so treat reaching it as equivalent to holding the
+remote. Three things keep that in check:
+
+- **Authentication is the proxy's job.** There is no app-level login. The app is
+  published through a reverse proxy running forward auth (authentik here), and it
+  trusts that the proxy has already authenticated whoever reaches it. Do not expose
+  port 4000 directly.
+- **ufw limits port 4000 to the proxy.** `install.sh` adds a ufw rule allowing port
+  4000 only from the reverse proxy IP, so nothing else on the LAN can reach the app
+  and skip the proxy. Passing `--skip-firewall`, or leaving the proxy IP blank at the
+  prompt, leaves the port open to the whole LAN - the script warns when it does.
+- **CSRF protection covers all state changes.** Forward auth proves who is calling,
+  but it does not stop another site from making your authenticated browser send a
+  request. Every state-changing route is POST-only and protected by Flask-WTF's
+  `CSRFProtect`, so a cross-site form submission is rejected with a 400. `GET` on
+  `/toggle` returns 405.
 
 ## Service management
 

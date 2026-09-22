@@ -47,6 +47,7 @@
         .btn {
             display: block;
             width: 100%;
+            font-family: inherit;
             text-align: center;
             text-decoration: none;
             border: none;
@@ -139,15 +140,22 @@
         </div>
         {% endif %}
 
-        <a href="/toggle" class="btn btn-toggle">Toggle Gate</a>
+        <form method="post" action="/toggle">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-toggle">Toggle Gate</button>
+        </form>
 
-        <a href="/toggle-scheduler" class="btn btn-scheduler {{ 'on' if scheduler_enabled else '' }}">
-            Scheduler: {{ 'On' if scheduler_enabled else 'Off' }}
-        </a>
+        <form method="post" action="/toggle-scheduler">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-scheduler {{ 'on' if scheduler_enabled else '' }}">
+                Scheduler: {{ 'On' if scheduler_enabled else 'Off' }}
+            </button>
+        </form>
 
         <div class="schedules">
             {% for job, time in jobs.items() %}
             <form method="post" action="/update_job/{{ job }}" class="schedule-row">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <label for="time-{{ job }}">Time {{ job }}</label>
                 <input type="time" id="time-{{ job }}" name="new_time" value="{{ time }}" onchange="this.form.submit()">
             </form>
